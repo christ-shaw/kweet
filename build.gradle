@@ -48,5 +48,6 @@ dependencies {
 // https://mvnrepository.com/artifact/mysql/mysql-connector-java
     implementation group: 'mysql', name: 'mysql-connector-java', version: '8.0.19'
     implementation "org.jetbrains.exposed:exposed-java-time:$exposed_version"
+    implementation "io.ktor:ktor-server-sessions:$ktor_version"
     testImplementation "io.ktor:ktor-server-tests:$ktor_version"
 }

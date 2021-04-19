@@ -1,27 +1,27 @@
 package com.xzb
 
-import io.ktor.application.*
-import io.ktor.response.*
-import io.ktor.request.*
-import io.ktor.routing.*
-import io.ktor.http.*
-import io.ktor.html.*
-import kotlinx.html.*
-import kotlinx.css.*
-import io.ktor.locations.*
-import io.ktor.features.*
-import org.slf4j.event.*
 import com.fasterxml.jackson.databind.*
 import com.xzb.datasource.DAOFacade
 import com.xzb.datasource.DAOFacadeDatabase
-import com.xzb.datasource.DatabaseFactory
-import com.xzb.entity.Kweets
-import com.xzb.entity.Users
+import com.xzb.routing.register
+import com.xzb.routing.userPage
+import io.ktor.application.*
+import io.ktor.features.*
+import io.ktor.html.*
+import io.ktor.http.*
 import io.ktor.jackson.*
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
-import java.io.File
+import io.ktor.locations.*
+import io.ktor.request.*
+import io.ktor.response.*
+import io.ktor.routing.*
+import io.ktor.sessions.*
+import io.ktor.util.*
+import kotlinx.css.*
+import kotlinx.html.*
+import org.slf4j.event.*
+import session.KweetSession
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
 val dao :DAOFacade  = DAOFacadeDatabase()
@@ -29,8 +29,7 @@ val dao :DAOFacade  = DAOFacadeDatabase()
 @Suppress("unused") // Referenced in application.conf
 @JvmOverloads
 fun Application.module(testing: Boolean = false) {
-    install(Locations) {
-    }
+    install(Locations)
 
     install(CallLogging) {
         level = Level.INFO
@@ -49,39 +48,53 @@ fun Application.module(testing: Boolean = false) {
         }
     }
 
+    install(Sessions) {
+        cookie<KweetSession>("LOGIN_SESSION"){
+            val secretSignKey = hex("000102030405060708090a0b0c0d0e0f")
+            transform(SessionTransportTransformerMessageAuthentication(secretSignKey))
+            cookie.path = "/"
+            cookie.maxAgeInSeconds = 1000
+        }
+    }
+
     // 初始化数据库
    dao.init()
+    val hashFunction = { s: String -> hash(s) }
     routing {
-        get("/") {
-            call.respondText("HELLO WORLD!", contentType = ContentType.Text.Plain)
-        }
-
-        get("/html-dsl") {
-            call.respondHtml {
-                body {
-                    h1 { +"HTML" }
-                    ul {
-                        for (n in 1..10) {
-                            li { +"$n" }
-                        }
-                    }
-                }
-            }
-        }
-
-        get("/styles.css") {
-            call.respondCss {
-                body {
-                    backgroundColor = Color.red
-                }
-                p {
-                    fontSize = 2.em
-                }
-                rule("p.myclass") {
-                    color = Color.blue
-                }
-            }
-        }
+        register(dao,hashFunction)
+        userPage(dao)
+//
+//        get("/") {
+//
+//            call.respondText("HELLO WORLD!", contentType = ContentType.Text.Plain)
+//        }
+//
+//        get("/html-dsl") {
+//            call.respondHtml {
+//                body {
+//                    h1 { +"HTML" }
+//                    ul {
+//                        for (n in 1..10) {
+//                            li { +"$n" }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        get("/styles.css") {
+//            call.respondCss {
+//                body {
+//                    backgroundColor = Color.red
+//                }
+//                p {
+//                    fontSize = 2.em
+//                }
+//                rule("p.myclass") {
+//                    color = Color.blue
+//                }
+//            }
+//        }
 
         get<MyLocation> {
             call.respondText("Location: name=${it.name}, arg1=${it.arg1}, arg2=${it.arg2}")
@@ -123,4 +136,20 @@ fun CommonAttributeGroupFacade.style(builder: CSSBuilder.() -> Unit) {
 
 suspend inline fun ApplicationCall.respondCss(builder: CSSBuilder.() -> Unit) {
     this.respondText(CSSBuilder().apply(builder).toString(), ContentType.Text.CSS)
+}
+
+
+suspend fun ApplicationCall.redirect(location: Any) {
+    val host = request.host() ?: "localhost"
+    val portSpec = request.port().let { if (it == 80) "" else ":$it" }
+    val address = host + portSpec
+
+    respondRedirect("http://$address${application.locations.href(location)}")
+}
+fun hash(password: String): String {
+    val hashKey = hex("6819b57a326945c1968f45236589")
+    val hmacKey = SecretKeySpec(hashKey, "HmacSHA1")
+    val hmac = Mac.getInstance("HmacSHA1")
+    hmac.init(hmacKey)
+    return hex(hmac.doFinal(password.toByteArray(Charsets.UTF_8)))
 }
