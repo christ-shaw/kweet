@@ -1,8 +1,10 @@
 package com.xzb
 
 import com.fasterxml.jackson.databind.*
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.xzb.datasource.DAOFacade
 import com.xzb.datasource.DAOFacadeDatabase
+import com.xzb.routing.index
 import com.xzb.routing.register
 import com.xzb.routing.userPage
 import io.ktor.application.*
@@ -20,6 +22,10 @@ import kotlinx.css.*
 import kotlinx.html.*
 import org.slf4j.event.*
 import session.KweetSession
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.time.LocalDateTime
+import java.util.*
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -45,9 +51,18 @@ fun Application.module(testing: Boolean = false) {
     install(ContentNegotiation) {
         jackson {
             enable(SerializationFeature.INDENT_OUTPUT)
+            dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:SS" , Locale.CHINA)
         }
     }
-
+    install(DataConversion)
+    {
+        convert<LocalDateTime> {
+            val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:SS" , Locale.CHINA)
+            encode { values->
+                values.singleOrNull()?.let { fmt.parse(it) }
+            }
+        }
+    }
     install(Sessions) {
         cookie<KweetSession>("LOGIN_SESSION"){
             val secretSignKey = hex("000102030405060708090a0b0c0d0e0f")
@@ -63,6 +78,7 @@ fun Application.module(testing: Boolean = false) {
     routing {
         register(dao,hashFunction)
         userPage(dao)
+        index(dao)
 //
 //        get("/") {
 //
